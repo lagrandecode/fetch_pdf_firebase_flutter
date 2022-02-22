@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:html';
 import 'dart:io';
 
@@ -5,6 +6,7 @@ import 'package:dio/dio.dart';
 import 'package:downloads_path_provider_28/downloads_path_provider_28.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:open_file/open_file.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'dart:io' as io;
@@ -42,26 +44,30 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
 
+  FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+
   bool loading = true;
-  List pdfList;
-
-
   String progress = "0";
   final Dio dio = Dio();
   String pdfPath = "http://192.168.1.103/upload_video_tutorial/pdffile.php";
+  late List pdfList;
 
   // check permission status
-
-  Future<bool> requestPermission(Permission permission) async{
-    final status = await permission.request();
-    if(permission != PermissionStatus.granted){
-      await ([Permission.storage]);
+  Future<bool> requestPermission() async{
+    // if(permission != PermissionStatus.granted){
+    //   await ([Permission.storage]);
+    // }
+    // return permission == PermissionStatus.granted;
+    if(await Permission.storage.request().isDenied){
+      await Permission.storage.request();
     }
-    return permission == PermissionStatus.granted;
+    return Permission == PermissionStatus.granted;
+
   }
   Future<Directory?>getDownloadDirectory() async {
     if(io.Platform.isAndroid){
       return await DownloadsPathProvider.downloadsDirectory;
+
     }
     return getApplicationDocumentsDirectory();
   }
@@ -93,11 +99,15 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future _showNotification(Map<String, dynamic> downloadStatus) async {
-    final andorid = AndroidNotificationDetails(
-        "channelId", 'Shajedul islam shawon', 'channelDescription',
-        priority: Priority.high, importance: Importance.max);
-    final ios = IOSNotificationDetails();
-    final notificationDetails = NotificationDetails(android: andorid, iOS: ios);
+    const android =  AndroidNotificationDetails(
+      "alausasabi",
+      "alausasabi channel",
+      icon: '@mipmap/ic_launcher',
+      importance: Importance.max,
+      priority: Priority.high,
+      playSound: true,);
+    const ios = IOSNotificationDetails();
+    const notificationDetails = NotificationDetails(android: android, iOS: ios);
     final json = jsonEncode(downloadStatus);
     final isSuccess = downloadStatus['isSuccess'];
     await FlutterLocalNotificationsPlugin().show(
@@ -107,7 +117,6 @@ class _HomePageState extends State<HomePage> {
         notificationDetails,
         payload: json);
   }
-
   Future _onselectedNotification(String json) async {
     final obj = jsonDecode(json);
     if (obj['isSuccess']) {
@@ -123,20 +132,20 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future download(String fileUrl, String fileName) async {
-    final dir = await getDonwloadDirectory();
-    final permissionStatus = await reguestPermission();
+    final dir = await getDownloadDirectory();
+    final permissionStatus = await requestPermission();
     if (permissionStatus) {
-      final savePath = path.join(dir.path, fileName);
+      final savePath = path.join(dir!.path, fileName);
       await startDownload(savePath, fileUrl);
       print(savePath);
     } else {
-      print("Permission Deined!");
+      print("Permission Denied!");
     }
   }
 
   Future fetchAllPdf() async {
     final response = await http
-        .get(pdfPath);
+        .get(Uri.parse(pdfPath));
     if (response.statusCode == 200) {
       setState(() {
         pdfList = jsonDecode(response.body);
@@ -156,69 +165,11 @@ class _HomePageState extends State<HomePage> {
     final ios = IOSInitializationSettings();
     final initSetting = InitializationSettings(android: android, iOS: ios);
     flutterLocalNotificationsPlugin.initialize(initSetting,
-        onSelectNotification: _onselectedNotification);
+        onSelectNotification: _onselectedNotification());
   }
+
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text("Pdf List"),
-      ),
-      body: loading
-          ? Center(
-        child: CircularProgressIndicator(),
-      )
-          : Column(
-        children: [
-          Expanded(
-            child: ListView.builder(
-                itemCount: pdfList.length,
-                itemBuilder: (context, index) {
-                  return ListTile(
-                    leading: IconButton(
-                      icon: Icon(Icons.picture_as_pdf),
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => PdfViewPage(
-                              url:
-                              "http://192.168.1.103/upload_video_tutorial/pdf/" +
-                                  pdfList[index]["pdffile"],
-                              name: pdfList[index]["name"],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                    title: Text(pdfList[index]["name"]),
-                    trailing: IconButton(
-                      icon: Icon(
-                        Icons.download_rounded,color: Colors.green,
-                      ),
-                      onPressed: () {
-                        download("http://192.168.1.103/upload_video_tutorial/pdf/" +
-                            pdfList[index]["pdffile"],pdfList[index]["pdffile"]);
-                      },
-                    ),
-                  );
-                }),
-          ),
-          progress=='0'?Container():Padding(
-            padding: const EdgeInsets.only(bottom:25.0),
-            child: Text("Download Progress : "+progress,style: TextStyle(color: Colors.blue),),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-
-
-
-@override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
